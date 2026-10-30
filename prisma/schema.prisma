@@ -1,0 +1,137 @@
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id           String         @id @default(uuid())
+  email        String         @unique
+  passwordHash String
+  name         String
+  role         String         @default("USER") // USER, MANAGER, ADMIN
+  department   String         @default("General")
+  avatar       String?
+  status       String         @default("ACTIVE") // ACTIVE, DISABLED
+  lastLoginAt  DateTime?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  bookings     Booking[]
+  notifications Notification[]
+  auditLogs    AuditLog[]
+}
+
+model Room {
+  id          String          @id @default(uuid())
+  code        String          @unique // e.g. RM-101
+  name        String
+  building    String
+  floor       Int
+  capacity    Int
+  description String?
+  imageUrl    String?
+  status      String          @default("AVAILABLE") // AVAILABLE, OCCUPIED, RESERVED, MAINTENANCE
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  equipment   RoomEquipment[]
+  bookings    Booking[]
+}
+
+model Equipment {
+  id          String              @id @default(uuid())
+  name        String              @unique
+  icon        String?
+  category    String              @default("General")
+  rooms       RoomEquipment[]
+  bookings    BookingEquipment[]
+}
+
+model RoomEquipment {
+  id          String    @id @default(uuid())
+  roomId      String
+  equipmentId String
+  quantity    Int       @default(1)
+  room        Room      @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  equipment   Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, equipmentId])
+}
+
+model Booking {
+  id                 String               @id @default(uuid())
+  bookingCode        String               @unique // e.g. BKG-20261029-001
+  roomId             String
+  userId             String
+  title              String
+  description        String?
+  startTime          DateTime
+  endTime            DateTime
+  participantsCount  Int
+  organizerName      String
+  status             String               @default("APPROVED") // PENDING, APPROVED, REJECTED, CANCELLED, COMPLETED
+  rejectionReason    String?
+  reminderSent       Boolean              @default(false)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  room               Room                 @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user               User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  participants       BookingParticipant[]
+  equipmentRequested BookingEquipment[]
+  notifications      Notification[]
+
+  @@index([roomId, startTime, endTime])
+  @@index([status])
+}
+
+model BookingParticipant {
+  id        String   @id @default(uuid())
+  bookingId String
+  name      String
+  email     String?
+  booking   Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+}
+
+model BookingEquipment {
+  id          String    @id @default(uuid())
+  bookingId   String
+  equipmentId String
+  booking     Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  equipment   Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+
+  @@unique([bookingId, equipmentId])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  bookingId String?
+  title     String
+  message   String
+  type      String   // BOOKING_CREATED, BOOKING_APPROVED, BOOKING_REJECTED, BOOKING_CANCELLED, REMINDER_15MIN, SYSTEM
+  isRead    Boolean  @default(false)
+  linkUrl   String?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  booking   Booking? @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  action    String   // LOGIN, CREATE_BOOKING, UPDATE_BOOKING, APPROVE_BOOKING, REJECT_BOOKING, CANCEL_BOOKING, UPDATE_ROOM, UPDATE_USER
+  entity    String   // BOOKING, ROOM, USER, AUTH
+  entityId  String?
+  details   String?  // JSON string
+  ipAddress String?
+  createdAt DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([action])
+  @@index([entity])
+  @@index([createdAt])
+}
