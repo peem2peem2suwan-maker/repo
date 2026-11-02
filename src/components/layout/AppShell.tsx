@@ -152,16 +152,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     };
   }, [pathname, showToast, fetchNotifications, router]);
 
-  // Quick switch role
-  const handleQuickSwitch = async (role: 'ADMIN' | 'MANAGER' | 'USER') => {
+  // Quick switch user/role
+  const handleQuickSwitch = async (userIdOrRole: string) => {
     try {
       const res = await fetch('/api/auth/quick-switch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ role }),
+        body: JSON.stringify({ userId: userIdOrRole, role: userIdOrRole }),
       });
       if (res.ok) {
-        showToast('success', `สลับบทบาทเป็น ${role} เรียบร้อยแล้ว`);
+        const data = await res.json();
+        showToast('success', `สลับเป็น ${data.user?.name || userIdOrRole} เรียบร้อยแล้ว`);
         await fetchCurrentUser();
         router.refresh();
       }

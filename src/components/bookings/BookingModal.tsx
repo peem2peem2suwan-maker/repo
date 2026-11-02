@@ -1,17 +1,43 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { X, Calendar, Clock, Users, AlertTriangle, CheckCircle2, Building, Sparkles, Plus, Trash2, ArrowRight } from 'lucide-react';
-import { Room, Equipment } from '@/types';
-import { useToast } from '../ui/Toast';
+import {
+  X,
+  Calendar,
+  Clock,
+  Users,
+  AlertTriangle,
+  CheckCircle2,
+  Building,
+  Sparkles,
+  Phone,
+  Briefcase,
+  Layers,
+  FileText,
+  ShieldCheck,
+  CheckSquare,
+  Square,
+  Package,
+} from 'lucide-react';
+import { Room } from '@/types';
+import Swal from 'sweetalert2';
 
 interface BookingModalProps {
   room: Room | null;
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: (newBooking?: any) => void;
   allRooms?: Room[];
 }
+
+const DEFAULT_EQUIPMENTS = [
+  'เครื่องฉายโปรเจกเตอร์ / จอภาพ (Projector & Screen)',
+  'สมาร์ททีวี 75 นิ้ว 4K (Smart TV)',
+  'ระบบเครื่องเสียงและไมโครโฟนไร้สาย (Audio & Wireless Mic)',
+  'ระบบวิดีโอคอนเฟอเรนซ์ (Zoom/Teams Rooms)',
+  'กระดานไวท์บอร์ดอัจฉริยะ (Smart Whiteboard)',
+  'คอมพิวเตอร์/โน้ตบุ๊กสำหรับนำเสนอ (Presentation Laptop)',
+];
 
 export function BookingModal({
   room: initialRoom,
@@ -20,36 +46,52 @@ export function BookingModal({
   onSuccess,
   allRooms = [],
 }: BookingModalProps) {
-  const { showToast } = useToast();
+  // Form fields according to Checklist
+  const [selectedRoomId, setSelectedRoomId] = useState<string>(initialRoom?.id || '');
+  const [customRoomName, setCustomRoomName] = useState<string>('');
+  const [requesterName, setRequesterName] = useState<string>('นายนเรศ สุขสวัสดิ์');
+  const [position, setPosition] = useState<string>('หัวหน้าแผนกวิชาช่างยนต์');
+  const [department, setDepartment] = useState<string>('แผนกวิชาช่างยนต์');
+  const [phone, setPhone] = useState<string>('089-876-5432');
+  const [title, setTitle] = useState<string>('');
+  const [description, setDescription] = useState<string>('');
+  const [date, setDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
+  const [startTime, setStartTime] = useState<string>('09:00');
+  const [endTime, setEndTime] = useState<string>('12:00');
+  const [participantsCount, setParticipantsCount] = useState<number>(20);
 
-  const [selectedRoom, setSelectedRoom] = useState<Room | null>(initialRoom);
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [date, setDate] = useState(() => {
-    const d = new Date();
-    return d.toISOString().slice(0, 10);
-  });
-  const [startTime, setStartTime] = useState('10:00');
-  const [endTime, setEndTime] = useState('11:00');
-  const [participantsCount, setParticipantsCount] = useState<number>(4);
-  const [organizerName, setOrganizerName] = useState('');
-  const [participants, setParticipants] = useState<string[]>(['']);
-  const [selectedEquipmentIds, setSelectedEquipmentIds] = useState<string[]>([]);
+  // Equipments & Additional items
+  const [selectedEquipments, setSelectedEquipments] = useState<string[]>([
+    'เครื่องฉายโปรเจกเตอร์ / จอภาพ (Projector & Screen)',
+    'ระบบเครื่องเสียงและไมโครโฟนไร้สาย (Audio & Wireless Mic)',
+  ]);
+  const [extraTables, setExtraTables] = useState<number>(0);
+  const [extraChairs, setExtraChairs] = useState<number>(0);
+  const [extraEquipmentNote, setExtraEquipmentNote] = useState<string>('');
 
-  // Collision and validation state
-  const [isCheckingConflict, setIsCheckingConflict] = useState(false);
+  // Civil service property declaration
+  const [agreedGovProperty, setAgreedGovProperty] = useState<boolean>(false);
+
+  // Conflict state
+  const [isCheckingConflict, setIsCheckingConflict] = useState<boolean>(false);
   const [conflictData, setConflictData] = useState<any>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   useEffect(() => {
     if (initialRoom) {
-      setSelectedRoom(initialRoom);
+      setSelectedRoomId(initialRoom.id);
+    } else if (allRooms.length > 0 && !selectedRoomId) {
+      setSelectedRoomId(allRooms[0].id);
     }
-  }, [initialRoom]);
+  }, [initialRoom, allRooms]);
 
-  // Check collision automatically when room, date, or time changes
+  // Conflict Detection
   useEffect(() => {
-    if (!isOpen || !selectedRoom || !date || !startTime || !endTime) return;
+    if (!isOpen || !selectedRoomId || !date || !startTime || !endTime) return;
+    if (selectedRoomId === 'other') {
+      setConflictData({ hasConflict: false });
+      return;
+    }
 
     const startDateTime = `${date}T${startTime}:00`;
     const endDateTime = `${date}T${endTime}:00`;
@@ -69,7 +111,7 @@ export function BookingModal({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            roomId: selectedRoom.id,
+            roomId: selectedRoomId,
             startTime: startDateTime,
             endTime: endDateTime,
             participantsCount,
@@ -82,93 +124,112 @@ export function BookingModal({
       } finally {
         setIsCheckingConflict(false);
       }
-    }, 400);
+    }, 350);
 
     return () => clearTimeout(timer);
-  }, [isOpen, selectedRoom, date, startTime, endTime, participantsCount]);
+  }, [isOpen, selectedRoomId, date, startTime, endTime, participantsCount]);
 
-  if (!isOpen || !selectedRoom) return null;
+  if (!isOpen) return null;
 
-  const handleAddParticipant = () => {
-    setParticipants([...participants, '']);
-  };
+  const currentRoomObj = allRooms.find((r) => r.id === selectedRoomId);
 
-  const handleUpdateParticipant = (index: number, val: string) => {
-    const next = [...participants];
-    next[index] = val;
-    setParticipants(next);
-  };
-
-  const handleRemoveParticipant = (index: number) => {
-    setParticipants(participants.filter((_, i) => i !== index));
-  };
-
-  const handleSelectSuggestedRoom = (roomItem: any) => {
-    const matched = allRooms.find((r) => r.id === roomItem.id);
-    if (matched) {
-      setSelectedRoom(matched);
-      showToast('info', `เปลี่ยนเป็นห้อง ${matched.name} เรียบร้อยแล้ว`);
+  const toggleEquipment = (eq: string) => {
+    if (selectedEquipments.includes(eq)) {
+      setSelectedEquipments(selectedEquipments.filter((item) => item !== eq));
+    } else {
+      setSelectedEquipments([...selectedEquipments, eq]);
     }
-  };
-
-  const handleSelectSuggestedSlot = (slot: { startTime: string; endTime: string }) => {
-    const s = new Date(slot.startTime);
-    const e = new Date(slot.endTime);
-    setStartTime(s.toTimeString().slice(0, 5));
-    setEndTime(e.toTimeString().slice(0, 5));
-    showToast('info', 'เลือกช่วงเวลาว่างแนะนำแล้ว');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (!agreedGovProperty) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'กรุณายืนยันข้อตกลง',
+        text: 'กรุณากดติ๊กถูกยืนยันการดูแลรักษาทรัพย์สินของทางราชการก่อนส่งคำขอ',
+        confirmButtonText: 'รับทราบ',
+        confirmButtonColor: '#2563eb',
+      });
+      return;
+    }
+
     if (conflictData?.hasConflict) {
-      showToast('error', conflictData.reason || 'ช่วงเวลานี้ไม่สามารถจองได้');
+      Swal.fire({
+        icon: 'error',
+        title: 'ช่วงเวลาทับซ้อน (Conflict)',
+        text: conflictData.reason || 'ห้องประชุมไม่ว่างในช่วงเวลาดังกล่าว กรุณาเปลี่ยนห้องหรือเวลา',
+        confirmButtonText: 'ตกลง',
+        confirmButtonColor: '#dc2626',
+      });
+      return;
+    }
+
+    if (selectedRoomId === 'other' && !customRoomName.trim()) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'กรุณาระบุห้องประชุม',
+        text: 'กรุณาระบุชื่อห้องประชุมที่ต้องการขอใช้บริการ',
+        confirmButtonText: 'ตกลง',
+      });
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const startDateTime = `${date}T${startTime}:00`;
-      const endDateTime = `${date}T${endTime}:00`;
-
-      const validParticipants = participants.filter((p) => p.trim() !== '');
+      const payload = {
+        roomId: selectedRoomId,
+        customRoomName: selectedRoomId === 'other' ? customRoomName : '',
+        requesterName,
+        position,
+        department,
+        phone,
+        title,
+        description,
+        startTime: `${date}T${startTime}:00`,
+        endTime: `${date}T${endTime}:00`,
+        participantsCount,
+        selectedEquipments,
+        extraTables,
+        extraChairs,
+        extraEquipmentNote,
+        agreedGovProperty: true,
+      };
 
       const res = await fetch('/api/bookings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          roomId: selectedRoom.id,
-          title,
-          description,
-          startTime: startDateTime,
-          endTime: endDateTime,
-          participantsCount,
-          organizerName,
-          participants: validParticipants,
-          equipmentIds: selectedEquipmentIds,
-        }),
+        body: JSON.stringify(payload),
       });
 
+      if (!res.ok) throw new Error('Failed to create booking');
       const data = await res.json();
 
-      if (!res.ok) {
-        if (data.conflictDetails) {
-          setConflictData(data.conflictDetails);
-        }
-        showToast('error', data.error || 'ไม่สามารถทำการจองได้');
-        return;
-      }
+      Swal.fire({
+        icon: 'success',
+        title: 'ส่งแบบคำขอสำเร็จ!',
+        html: `
+          <div class="text-left text-sm space-y-1">
+            <p><strong>รหัสคำขอ:</strong> <span class="text-blue-600 font-mono">${data.booking?.bookingCode}</span></p>
+            <p><strong>ห้องประชุม:</strong> ${currentRoomObj?.name || customRoomName}</p>
+            <p><strong>ผู้ขอ:</strong> ${requesterName} (${department})</p>
+            <p><strong>สถานะปัจจุบัน:</strong> <span class="text-amber-600 font-semibold">รอการตรวจห้อง (นายวัชรพงศ์ โสภา)</span></p>
+          </div>
+        `,
+        confirmButtonText: 'ตกลง / ดูรายการการจอง',
+        confirmButtonColor: '#16a34a',
+      });
 
-      showToast(
-        'success',
-        `จองห้อง ${selectedRoom.name} สำเร็จ (รหัส: ${data.booking.bookingCode})`,
-        'บันทึกสำเร็จ'
-      );
-      onSuccess();
+      onSuccess(data.booking);
       onClose();
-    } catch {
-      showToast('error', 'เกิดข้อผิดพลาดในการส่งข้อมูล');
+    } catch (err) {
+      console.error(err);
+      Swal.fire({
+        icon: 'error',
+        title: 'เกิดข้อผิดพลาด',
+        text: 'ไม่สามารถบันทึกคำขอได้ กรุณาลองใหม่อีกครั้ง',
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -176,350 +237,396 @@ export function BookingModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
-      <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-        {/* Modal Header */}
-        <div className="flex items-center justify-between p-6 border-b border-slate-100 bg-slate-50/70">
+      <div className="relative w-full max-w-3xl my-8 bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-blue-700 via-indigo-700 to-blue-800 text-white">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center">
-              <Calendar className="w-5 h-5" />
+            <div className="p-2 bg-white/10 rounded-xl backdrop-blur-sm">
+              <FileText className="w-6 h-6 text-blue-200" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-slate-900">จองห้องประชุม</h2>
-              <p className="text-xs text-slate-500 flex items-center gap-2">
-                <span>{selectedRoom.name}</span>
-                <span className="text-slate-300">•</span>
-                <span>{selectedRoom.building} ชั้น {selectedRoom.floor}</span>
-                <span className="text-slate-300">•</span>
-                <span className="text-blue-600 font-medium">รองรับ {selectedRoom.capacity} ที่นั่ง</span>
-              </p>
+              <h2 className="text-xl font-bold tracking-tight">แบบคำขออนุญาตใช้ห้องประชุมและอุปกรณ์</h2>
+              <p className="text-xs text-blue-100">งานศูนย์ดิจิทัลเพื่อการศึกษา (แบบฟอร์มตรวจสอบตรวจรับระบบราชการ)</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition"
+            className="p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Modal Body */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-5">
-          {/* Room Selector if user wants to change */}
-          {allRooms.length > 0 && (
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                เลือกห้องประชุม
-              </label>
-              <select
-                value={selectedRoom.id}
-                onChange={(e) => {
-                  const target = allRooms.find((r) => r.id === e.target.value);
-                  if (target) setSelectedRoom(target);
-                }}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              >
-                {allRooms.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.code} - {r.name} (ความจุ {r.capacity} คน) {r.status === 'MAINTENANCE' ? '[ปิดปรับปรุง]' : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {/* Meeting Title */}
+        {/* Form Body */}
+        <form onSubmit={handleSubmit} className="p-6 space-y-6 max-h-[80vh] overflow-y-auto">
+          {/* Section 1: ข้อมูลผู้ขอใช้บริการ */}
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-              หัวข้อการประชุม <span className="text-rose-500">*</span>
-            </label>
-            <input
-              type="text"
-              required
-              placeholder="เช่น ประชุมวางแผนกลยุทธ์ไตรมาส 4"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none transition"
-            />
+            <div className="flex items-center gap-2 mb-3 pb-1 border-b border-slate-200 text-slate-800 font-semibold text-sm">
+              <Briefcase className="w-4 h-4 text-blue-600" />
+              <span>1. ข้อมูลผู้ขอใช้บริการ (ตามใบคำขอ)</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  ชื่อ-นามสกุล ผู้ขอ <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={requesterName}
+                  onChange={(e) => setRequesterName(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="เช่น นายนเรศ สุขสวัสดิ์"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  ตำแหน่ง <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={position}
+                  onChange={(e) => setPosition(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="เช่น หัวหน้าแผนกวิชา / ครู"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  หน่วยงาน / แผนกวิชา <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={department}
+                  onChange={(e) => setDepartment(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="เช่น แผนกวิชาช่างยนต์ / งานศูนย์ดิจิทัลฯ"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  เบอร์โทรศัพท์ติดต่อ <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                  <input
+                    type="tel"
+                    required
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="08X-XXX-XXXX"
+                  />
+                </div>
+              </div>
+            </div>
           </div>
 
-          {/* Date and Time Row */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                วันที่ <span className="text-rose-500">*</span>
-              </label>
-              <div className="relative">
+          {/* Section 2: เลือกห้องประชุมและเวลา */}
+          <div>
+            <div className="flex items-center gap-2 mb-3 pb-1 border-b border-slate-200 text-slate-800 font-semibold text-sm">
+              <Building className="w-4 h-4 text-blue-600" />
+              <span>2. ห้องประชุมและช่วงเวลาที่ขอใช้</span>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  เลือกห้องประชุมหลัก 6 ห้อง หรือระบุอื่นๆ <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={selectedRoomId}
+                  onChange={(e) => setSelectedRoomId(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-medium"
+                >
+                  {allRooms.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name} - {r.building} (รองรับ {r.capacity} คน)
+                    </option>
+                  ))}
+                  <option value="other">ห้องประชุมอื่นๆ (ระบุชื่อห้องเอง)</option>
+                </select>
+              </div>
+
+              {selectedRoomId === 'other' && (
+                <div>
+                  <label className="block text-xs font-semibold text-blue-800 mb-1">
+                    ระบุชื่อห้องประชุมที่ต้องการ <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={customRoomName}
+                    onChange={(e) => setCustomRoomName(e.target.value)}
+                    placeholder="เช่น ห้องประชุมแผนกวิชาคอมพิวเตอร์ หรือ ลานอเนกประสงค์"
+                    className="w-full px-3 py-2 text-sm border border-blue-300 bg-blue-50/50 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              )}
+
+              {/* Title & Description */}
+              <div className="grid grid-cols-1 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    หัวข้อการประชุม / กิจกรรม <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="เช่น ประชุมเตรียมความพร้อมการจัดกิจกรรมแข่งขันทักษะวิชาชีพ"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    วัตถุประสงค์ / รายละเอียดเพิ่มเติม
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="ระบุวัตถุประสงค์หรือข้อมูลสำหรับการจัดเตรียมสถานที่..."
+                  />
+                </div>
+              </div>
+
+              {/* Date & Time Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    วันที่ขอใช้ <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <Calendar className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                    <input
+                      type="date"
+                      required
+                      value={date}
+                      onChange={(e) => setDate(e.target.value)}
+                      className="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    เวลาเริ่มต้น <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="time"
+                    required
+                    value={startTime}
+                    onChange={(e) => setStartTime(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    เวลาสิ้นสุด <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="time"
+                    required
+                    value={endTime}
+                    onChange={(e) => setEndTime(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  จำนวนผู้เข้าร่วม (คน) <span className="text-red-500">*</span>
+                </label>
+                <div className="relative max-w-xs">
+                  <Users className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                  <input
+                    type="number"
+                    min={1}
+                    max={currentRoomObj ? currentRoomObj.capacity * 2 : 200}
+                    value={participantsCount}
+                    onChange={(e) => setParticipantsCount(Number(e.target.value))}
+                    className="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              {/* Conflict Detection Banner */}
+              {isCheckingConflict ? (
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600 flex items-center gap-2">
+                  <div className="w-3.5 h-3.5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                  <span>กำลังตรวจสอบความพร้อมและเวลาชนกัน...</span>
+                </div>
+              ) : conflictData?.hasConflict ? (
+                <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 space-y-2">
+                  <div className="flex items-center gap-2 font-semibold text-sm text-red-800">
+                    <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+                    <span>ไม่สามารถจองได้: {conflictData.reason}</span>
+                  </div>
+                  {conflictData.suggestedRooms?.length > 0 && (
+                    <div className="pt-2 border-t border-red-200">
+                      <span className="font-semibold">ห้องอื่นที่ว่างในเวลานี้: </span>
+                      {conflictData.suggestedRooms.map((sr: any) => (
+                        <button
+                          type="button"
+                          key={sr.id}
+                          onClick={() => setSelectedRoomId(sr.id)}
+                          className="inline-block ml-1 underline hover:text-red-950 font-medium"
+                        >
+                          {sr.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>ห้องว่างพร้อมใช้งานในช่วงเวลาที่เลือก (ไม่มีการจองทับซ้อน)</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Section 3: ครุภัณฑ์ 6 รายการ + โต๊ะเก้าอี้ */}
+          <div>
+            <div className="flex items-center gap-2 mb-3 pb-1 border-b border-slate-200 text-slate-800 font-semibold text-sm">
+              <Package className="w-4 h-4 text-blue-600" />
+              <span>3. ครุภัณฑ์และอุปกรณ์ที่ขอใช้ (ครบ 6 รายการหลัก + เพิ่มเติม)</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-4">
+              {DEFAULT_EQUIPMENTS.map((eq) => {
+                const checked = selectedEquipments.includes(eq);
+                return (
+                  <label
+                    key={eq}
+                    onClick={() => toggleEquipment(eq)}
+                    className={`flex items-start gap-2.5 p-2.5 rounded-xl border text-xs cursor-pointer transition-all ${
+                      checked
+                        ? 'border-blue-500 bg-blue-50/60 text-blue-900 font-medium'
+                        : 'border-slate-200 hover:border-slate-300 text-slate-700'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => {}}
+                      className="mt-0.5 rounded text-blue-600 focus:ring-blue-500"
+                    />
+                    <span>{eq}</span>
+                  </label>
+                );
+              })}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">
+                  ขอโต๊ะเพิ่มเติม (จำนวนตัว)
+                </label>
                 <input
-                  type="date"
-                  required
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  type="number"
+                  min={0}
+                  max={50}
+                  value={extraTables}
+                  onChange={(e) => setExtraTables(Number(e.target.value))}
+                  className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg bg-white"
+                  placeholder="0"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">
+                  ขอเก้าอี้เพิ่มเติม (จำนวนตัว)
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  max={200}
+                  value={extraChairs}
+                  onChange={(e) => setExtraChairs(Number(e.target.value))}
+                  className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg bg-white"
+                  placeholder="0"
+                />
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-medium text-slate-700 mb-1">
+                  อุปกรณ์โสตทัศนูปกรณ์หรือสิ่งอำนวยความสะดวกอื่นๆ (ระบุ)
+                </label>
+                <input
+                  type="text"
+                  value={extraEquipmentNote}
+                  onChange={(e) => setExtraEquipmentNote(e.target.value)}
+                  placeholder="เช่น ปลั๊กพ่วง 3 ตา, พอยน์เตอร์เลเซอร์, ขาตั้งไมค์"
+                  className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg bg-white"
                 />
               </div>
             </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                เวลาเริ่ม <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="time"
-                required
-                value={startTime}
-                onChange={(e) => setStartTime(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                เวลาสิ้นสุด <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="time"
-                required
-                value={endTime}
-                onChange={(e) => setEndTime(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              />
-            </div>
           </div>
 
-          {/* REAL-TIME COLLISION ALERT & SUGGESTION BOX */}
-          {conflictData && conflictData.hasConflict && (
-            <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl text-rose-900 space-y-3 animate-in fade-in">
-              <div className="flex items-start gap-2.5">
-                <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-xs sm:text-sm font-bold text-rose-700">
-                    ไม่สามารถจองห้องนี้ได้ เนื่องจากมีการจองในช่วงเวลาดังกล่าว
-                  </p>
-                  <p className="text-xs text-rose-600 mt-0.5">{conflictData.reason}</p>
-                  {conflictData.conflictingBooking && (
-                    <p className="text-[11px] text-rose-500 mt-1">
-                      การจองเดิม: {conflictData.conflictingBooking.title} ({conflictData.conflictingBooking.organizerName})
-                    </p>
-                  )}
-                </div>
+          {/* Section 4: ข้อตกลงการดูแลรักษาทรัพย์สินราชการ */}
+          <div className="p-4 bg-amber-50/80 border border-amber-300 rounded-2xl">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                required
+                checked={agreedGovProperty}
+                onChange={(e) => setAgreedGovProperty(e.target.checked)}
+                className="mt-1 w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-amber-400"
+              />
+              <div className="text-xs text-amber-900 leading-relaxed">
+                <span className="font-bold block text-sm mb-0.5">
+                  ข้อตกลงและคำรับรองการดูแลรักษาทรัพย์สินของทางราชการ <span className="text-red-600">*</span>
+                </span>
+                ข้าพเจ้ายินยอมและยืนยันที่จะดูแลรักษาทรัพย์สิน ครุภัณฑ์ และสถานที่ของทางราชการให้อยู่ในสภาพเรียบร้อย สะอาด
+                พร้อมทั้งยินดีรับผิดชอบชดใช้ค่าเสียหายหากเกิดการชำรุด เสียหาย หรือสูญหายอันเนื่องมาจากการใช้งาน
               </div>
-
-              {/* Alternative Available Rooms */}
-              {conflictData.suggestedRooms && conflictData.suggestedRooms.length > 0 && (
-                <div className="pt-2 border-t border-rose-200/80">
-                  <p className="text-xs font-semibold text-rose-800 mb-2 flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-                    ห้องประชุมอื่นที่ว่างในช่วงเวลานี้ (แนะนำ):
-                  </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {conflictData.suggestedRooms.map((sRoom: any) => (
-                      <button
-                        key={sRoom.id}
-                        type="button"
-                        onClick={() => handleSelectSuggestedRoom(sRoom)}
-                        className="p-2.5 bg-white border border-rose-200 hover:border-blue-400 rounded-xl text-left transition flex items-center justify-between group shadow-sm"
-                      >
-                        <div>
-                          <p className="text-xs font-bold text-slate-800 group-hover:text-blue-600">
-                            {sRoom.name}
-                          </p>
-                          <p className="text-[10px] text-slate-500">
-                            ความจุ {sRoom.capacity} คน • {sRoom.building}
-                          </p>
-                        </div>
-                        <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-blue-600" />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Alternative Available Slots on Same Day */}
-              {conflictData.suggestedSlots && conflictData.suggestedSlots.length > 0 && (
-                <div className="pt-2 border-t border-rose-200/80">
-                  <p className="text-xs font-semibold text-rose-800 mb-1.5 flex items-center gap-1.5">
-                    <Clock className="w-3.5 h-3.5 text-blue-600" />
-                    ช่วงเวลาอื่นที่ห้องเดิมว่างในวันเดียวกัน:
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {conflictData.suggestedSlots.map((slot: any, idx: number) => {
-                      const s = new Date(slot.startTime).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
-                      const e = new Date(slot.endTime).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
-                      return (
-                        <button
-                          key={idx}
-                          type="button"
-                          onClick={() => handleSelectSuggestedSlot(slot)}
-                          className="px-2.5 py-1 bg-white border border-rose-200 hover:border-blue-500 rounded-lg text-xs font-semibold text-slate-700 hover:text-blue-600 shadow-sm"
-                        >
-                          {s} - {e}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {conflictData && !conflictData.hasConflict && (
-            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span>ห้องประชุมว่างและพร้อมใช้งานสำหรับช่วงเวลานี้</span>
-            </div>
-          )}
-
-          {/* Participants Count and Organizer */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                จำนวนผู้เข้าร่วม (คน) <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="number"
-                min={1}
-                max={selectedRoom.capacity}
-                required
-                value={participantsCount}
-                onChange={(e) => setParticipantsCount(Number(e.target.value))}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              />
-              {participantsCount > selectedRoom.capacity && (
-                <p className="text-[11px] text-rose-500 mt-1">
-                  จำนวนคนเกินความจุห้องที่รองรับได้ ({selectedRoom.capacity} คน)
-                </p>
-              )}
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                ผู้จัดประชุม / ผู้ติดต่อ
-              </label>
-              <input
-                type="text"
-                placeholder="ชื่อ-นามสกุล หรือเบอร์โทรติดต่อ"
-                value={organizerName}
-                onChange={(e) => setOrganizerName(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              />
-            </div>
-          </div>
-
-          {/* Description */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-              รายละเอียดเพิ่มเติม / วาระการประชุม
             </label>
-            <textarea
-              rows={2}
-              placeholder="ระบุวัตถุประสงค์หรือข้อมูลที่ต้องการแจ้งให้ผู้เข้าร่วมทราบ..."
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-            />
           </div>
 
-          {/* Equipment Requested */}
-          {selectedRoom.equipment && selectedRoom.equipment.length > 0 && (
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-2">
-                อุปกรณ์ที่ต้องการใช้งานในห้อง
-              </label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {selectedRoom.equipment.map((item) => {
-                  const isChecked = selectedEquipmentIds.includes(item.equipmentId);
-                  return (
-                    <label
-                      key={item.id}
-                      className={`flex items-center gap-2.5 p-2.5 rounded-xl border text-xs cursor-pointer transition ${
-                        isChecked
-                          ? 'bg-blue-50/70 border-blue-300 text-blue-900'
-                          : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={isChecked}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedEquipmentIds([...selectedEquipmentIds, item.equipmentId]);
-                          } else {
-                            setSelectedEquipmentIds(
-                              selectedEquipmentIds.filter((id) => id !== item.equipmentId)
-                            );
-                          }
-                        }}
-                        className="rounded text-blue-600 focus:ring-blue-500"
-                      />
-                      <span>{item.equipment.name}</span>
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Participants List */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-xs font-semibold text-slate-700">
-                รายชื่อผู้เข้าร่วมประชุม (ทางเลือก)
-              </label>
-              <button
-                type="button"
-                onClick={handleAddParticipant}
-                className="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                เพิ่มผู้เข้าร่วม
-              </button>
-            </div>
-            <div className="space-y-2">
-              {participants.map((p, idx) => (
-                <div key={idx} className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    placeholder={`ผู้เข้าร่วมคนที่ ${idx + 1} (ชื่อ หรือ อีเมล)`}
-                    value={p}
-                    onChange={(e) => handleUpdateParticipant(idx, e.target.value)}
-                    className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  />
-                  {participants.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveParticipant(idx)}
-                      className="p-2 text-slate-400 hover:text-rose-500 transition"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
+          {/* Actions */}
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+            >
+              ยกเลิก
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmitting || conflictData?.hasConflict || !agreedGovProperty}
+              className={`px-6 py-2.5 text-sm font-semibold text-white rounded-xl shadow-md transition-all flex items-center gap-2 ${
+                isSubmitting || conflictData?.hasConflict || !agreedGovProperty
+                  ? 'bg-slate-400 cursor-not-allowed opacity-60'
+                  : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-blue-500/25 active:scale-[0.98]'
+              }`}
+            >
+              {isSubmitting ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>กำลังส่งคำขอ...</span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>ส่งแบบคำขอใช้ห้องประชุม</span>
+                </>
+              )}
+            </button>
           </div>
         </form>
-
-        {/* Modal Footer */}
-        <div className="p-4 sm:p-6 border-t border-slate-100 bg-slate-50/70 flex items-center justify-end gap-3">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-5 py-2.5 text-xs sm:text-sm font-semibold text-slate-600 hover:bg-slate-200 rounded-xl transition"
-          >
-            ยกเลิก
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={isSubmitting || conflictData?.hasConflict || isCheckingConflict}
-            className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white text-xs sm:text-sm font-semibold rounded-xl shadow-lg shadow-blue-600/20 transition disabled:opacity-50 flex items-center gap-2"
-          >
-            {isSubmitting ? (
-              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-            ) : (
-              'ยืนยันการจองห้อง'
-            )}
-          </button>
-        </div>
       </div>
     </div>
   );

@@ -1,11 +1,13 @@
-export type UserRole = 'USER' | 'MANAGER' | 'ADMIN';
+export type UserRole = 'USER' | 'CHECKER' | 'ENDORSER' | 'APPROVER' | 'ADMIN';
 
 export type RoomStatus = 'AVAILABLE' | 'OCCUPIED' | 'RESERVED' | 'MAINTENANCE';
 
-export type BookingStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED' | 'COMPLETED';
+export type BookingStatus = 'PENDING' | 'CHECKED' | 'ENDORSED' | 'APPROVED' | 'REJECTED' | 'CANCELLED' | 'COMPLETED';
 
 export type NotificationType =
   | 'BOOKING_CREATED'
+  | 'BOOKING_CHECKED'
+  | 'BOOKING_ENDORSED'
   | 'BOOKING_APPROVED'
   | 'BOOKING_REJECTED'
   | 'BOOKING_CANCELLED'
@@ -17,7 +19,9 @@ export interface User {
   email: string;
   name: string;
   role: UserRole;
+  position?: string;
   department: string;
+  phone?: string;
   avatar?: string | null;
   status: 'ACTIVE' | 'DISABLED';
   lastLoginAt?: string | null;
@@ -67,11 +71,24 @@ export interface BookingEquipment {
   equipment: Equipment;
 }
 
+export interface ApprovalStage {
+  status: 'PENDING' | 'PASSED' | 'FAILED' | 'APPROVED' | 'REJECTED';
+  officer: string;
+  roleTitle: string;
+  actionDate?: string;
+  note?: string;
+}
+
 export interface Booking {
   id: string;
   bookingCode: string;
   roomId: string;
+  customRoomName?: string;
   userId: string;
+  requesterName: string;
+  position: string;
+  department: string;
+  phone: string;
   title: string;
   description?: string | null;
   startTime: string;
@@ -80,13 +97,29 @@ export interface Booking {
   organizerName: string;
   status: BookingStatus;
   rejectionReason?: string | null;
+  selectedEquipments?: string[];
+  extraTables?: number;
+  extraChairs?: number;
+  extraEquipmentNote?: string;
+  agreedGovProperty: boolean;
+  stage1: ApprovalStage; // ตรวจห้อง: นายวัชรพงศ์ โสภา
+  stage2: ApprovalStage; // รับรอง: นายเอกราช เขียวทอง
+  stage3: ApprovalStage; // อนุมัติ: นายชาตรี เริงชัยภูมิ
   reminderSent: boolean;
   createdAt: string;
   updatedAt: string;
   room?: Room;
   user?: User;
   participants?: BookingParticipant[];
-  equipmentRequested?: BookingEquipment[];
+}
+
+export interface Announcement {
+  id: string;
+  title: string;
+  content: string;
+  date: string;
+  author: string;
+  priority: 'NORMAL' | 'HIGH' | 'URGENT';
 }
 
 export interface NotificationItem {

@@ -2,37 +2,38 @@
 
 import React, { useState, useEffect } from 'react';
 import {
-  Building2,
-  CheckCircle2,
-  Clock,
   CalendarDays,
-  CalendarCheck2,
-  TrendingUp,
-  AlertCircle,
+  Clock,
+  CheckCircle2,
   Users,
-  ArrowRight,
+  Megaphone,
+  AlertCircle,
   Plus,
+  ArrowRight,
+  Printer,
+  Sparkles,
 } from 'lucide-react';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { DashboardCharts } from '@/components/dashboard/Charts';
 import { BookingModal } from '@/components/bookings/BookingModal';
-import { Room } from '@/types';
+import { RequisitionPrintModal } from '@/components/print/RequisitionPrintModal';
+import { Room, Booking, Announcement } from '@/types';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 
 export default function DashboardPage() {
-  const router = useRouter();
   const [stats, setStats] = useState<any>(null);
   const [allRooms, setAllRooms] = useState<Room[]>([]);
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
-  const [selectedRoomForBooking, setSelectedRoomForBooking] = useState<Room | null>(null);
+  const [selectedBookingForPrint, setSelectedBookingForPrint] = useState<Booking | null>(null);
 
   const fetchDashboardData = async () => {
     try {
-      const [statsRes, roomsRes] = await Promise.all([
+      const [statsRes, roomsRes, annRes] = await Promise.all([
         fetch('/api/dashboard/stats'),
         fetch('/api/rooms'),
+        fetch('/api/announcements'),
       ]);
 
       if (statsRes.ok) {
@@ -44,6 +45,11 @@ export default function DashboardPage() {
         const roomsData = await roomsRes.json();
         setAllRooms(roomsData.rooms || []);
       }
+
+      if (annRes.ok) {
+        const annData = await annRes.json();
+        setAnnouncements(annData.announcements || []);
+      }
     } catch (err) {
       console.error('Failed to load dashboard', err);
     } finally {
@@ -53,258 +59,238 @@ export default function DashboardPage() {
 
   useEffect(() => {
     fetchDashboardData();
+
+    const handleUpdate = () => fetchDashboardData();
+    window.addEventListener('mock-db-updated', handleUpdate);
+    return () => window.removeEventListener('mock-db-updated', handleUpdate);
   }, []);
 
-  const handleOpenQuickBooking = () => {
-    if (allRooms.length > 0) {
-      // Pick first available room
-      const freeRoom = allRooms.find((r) => r.status === 'AVAILABLE') || allRooms[0];
-      setSelectedRoomForBooking(freeRoom);
-      setIsBookingModalOpen(true);
-    } else {
-      router.push('/rooms');
-    }
+  const cards = stats?.cards || {
+    todayBookingsCount: 0,
+    pendingApprovalsCount: 0,
+    approvedBookingsCount: 0,
+    totalAttendees: 0,
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin" />
-          <p className="text-xs text-slate-500 font-medium">กำลังโหลดข้อมูล Dashboard...</p>
-        </div>
-      </div>
-    );
-  }
-
-  const cards = stats?.cards || {};
-
   return (
-    <div className="space-y-6">
-      {/* Top Banner with Quick Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-slate-900 to-slate-800 text-white p-6 sm:p-8 rounded-3xl shadow-xl shadow-slate-900/10">
+    <div className="space-y-8">
+      {/* Page Title & Action Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <span className="px-3 py-1 rounded-full text-xs font-semibold bg-blue-500/20 text-blue-300 border border-blue-400/30">
-            ภาพรวมองค์กรแบบ Real-time
-          </span>
-          <h1 className="text-xl sm:text-2xl font-black tracking-tight mt-2">
-            แดชบอร์ดระบบจองห้องประชุม
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full w-fit mb-2">
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>ระบบบริหารจัดการห้องประชุมและอุปกรณ์โสตฯ (ตรวจรับระบบ)</span>
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900">
+            ภาพรวมระบบและการจอง (Analytics & Overview)
           </h1>
-          <p className="text-xs sm:text-sm text-slate-400 mt-1 max-w-xl">
-            ตรวจสอบความพร้อมของห้องประชุม ติดตามการใช้งาน และอนุมัติคำขอจองแบบทันท่วงที
+          <p className="text-sm text-slate-500 mt-1">
+            รายงานสถิติแบบ Real-time, ประกาศงานศูนย์ดิจิทัลฯ และติดตามสถานะคำขอ
           </p>
         </div>
-        <div className="flex items-center gap-2.5">
+
+        <div className="flex items-center gap-3">
+          <Link
+            href="/all-bookings"
+            className="px-4 py-2.5 bg-white border border-slate-200 text-slate-700 font-semibold rounded-xl hover:bg-slate-50 text-sm shadow-sm transition-all"
+          >
+            จัดการการอนุมัติ 3 ระดับ
+          </Link>
           <button
-            onClick={handleOpenQuickBooking}
-            className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white text-xs sm:text-sm font-semibold rounded-xl shadow-lg shadow-blue-600/30 transition flex items-center gap-2"
+            onClick={() => setIsBookingModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-sm shadow-md shadow-blue-500/20 transition-all active:scale-95"
           >
             <Plus className="w-4 h-4" />
-            <span>จองห้องประชุมด่วน</span>
+            <span>ยื่นแบบคำขอจองห้อง</span>
           </button>
-          <Link
-            href="/calendar"
-            className="px-4 py-2.5 bg-white/10 hover:bg-white/15 text-white text-xs sm:text-sm font-semibold rounded-xl transition border border-white/10"
-          >
-            เปิดปฏิทิน
-          </Link>
         </div>
       </div>
 
-      {/* Row 1: Key Performance Metric Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5">
+      {/* หมวดที่ 2 ข้อ 1: การ์ดสรุปยอดรวม 4 ใบ แบบ Real-time */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         <StatCard
-          title="ห้องทั้งหมด"
-          value={cards.totalRooms || 0}
-          subtitle={`กำลังปรับปรุง ${cards.maintenanceCount || 0} ห้อง`}
-          icon={Building2}
-          color="slate"
-        />
-        <StatCard
-          title="ห้องที่ว่างขณะนี้"
-          value={cards.availableCount || 0}
-          subtitle={`พร้อมใช้งานทันที`}
-          icon={CheckCircle2}
-          color="emerald"
-          trend="พร้อมจอง"
+          title="การจองวันนี้"
+          value={cards.todayBookingsCount}
+          subtitle="รายการใช้งานประจำวันนี้"
+          icon={CalendarDays}
+          color="blue"
+          trend="+12%"
           trendType="positive"
         />
         <StatCard
-          title="ห้องที่กำลังใช้งาน"
-          value={cards.occupiedCount || 0}
-          subtitle={`จองไว้ล่วงหน้าวันนี้ ${cards.reservedCount || 0} ห้อง`}
+          title="รออนุมัติ (3 ระดับ)"
+          value={cards.pendingApprovalsCount}
+          subtitle="รอตรวจห้อง / รับรอง / อนุมัติ"
           icon={Clock}
-          color="rose"
+          color="amber"
         />
         <StatCard
-          title="การจองวันนี้"
-          value={cards.todayBookingsCount || 0}
-          subtitle={`สัปดาห์นี้ ${cards.weekBookingsCount || 0} | เดือนนี้ ${cards.monthBookingsCount || 0}`}
-          icon={CalendarCheck2}
+          title="อนุมัติแล้ว"
+          value={cards.approvedBookingsCount}
+          subtitle="คำขอที่ได้รับการอนุมัติสมบูรณ์"
+          icon={CheckCircle2}
+          color="emerald"
+        />
+        <StatCard
+          title="จำนวนผู้เข้าใช้รวม"
+          value={`${cards.totalAttendees} คน`}
+          subtitle="ผู้เข้าร่วมประชุมสะสมทั้งหมด"
+          icon={Users}
           color="blue"
         />
       </div>
 
-      {/* Secondary Highlights Row: Pending & Most Used */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-amber-50/80 border border-amber-200/80 rounded-2xl p-4 flex items-center justify-between">
+      {/* หมวดที่ 2 ข้อ 4: ส่วนประกาศประชาสัมพันธ์สถานะห้องประชุมหรือข่าวสารจากงานศูนย์ดิจิทัลฯ */}
+      <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white p-6 rounded-3xl shadow-lg border border-blue-800">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="p-2 bg-blue-500/20 text-blue-300 rounded-xl backdrop-blur-sm">
+            <Megaphone className="w-5 h-5" />
+          </div>
           <div>
-            <p className="text-xs font-semibold text-amber-800">คำขอรอการอนุมัติ</p>
-            <p className="text-xl font-extrabold text-amber-900 mt-0.5">
-              {cards.pendingApprovalsCount || 0} รายการ
+            <h2 className="text-base sm:text-lg font-bold tracking-tight">
+              ประกาศประชาสัมพันธ์สถานะห้องประชุมและข่าวสาร (งานศูนย์ดิจิทัลเพื่อการศึกษา)
+            </h2>
+            <p className="text-xs text-blue-200">
+              ข้อความแจ้งเตือน การบำรุงรักษาอุปกรณ์ และมาตรการความปลอดภัยของทางราชการ
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {announcements.map((item) => (
+            <div
+              key={item.id}
+              className="p-4 bg-white/10 hover:bg-white/15 rounded-2xl backdrop-blur-md border border-white/10 transition-all flex flex-col justify-between"
+            >
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                      item.priority === 'HIGH'
+                        ? 'bg-rose-500/30 text-rose-200 border border-rose-400/40'
+                        : 'bg-blue-500/30 text-blue-200 border border-blue-400/30'
+                    }`}
+                  >
+                    {item.priority === 'HIGH' ? 'ด่วน / ปรับปรุง' : 'ข่าวสารทั่วไป'}
+                  </span>
+                  <span className="text-[11px] text-slate-300">{item.date}</span>
+                </div>
+                <h3 className="font-semibold text-sm text-white mb-1.5 leading-snug">{item.title}</h3>
+                <p className="text-xs text-slate-200/90 leading-relaxed line-clamp-3">{item.content}</p>
+              </div>
+              <div className="mt-3 pt-2 border-t border-white/10 text-[11px] text-blue-200 flex items-center justify-between">
+                <span>{item.author}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* หมวดที่ 2 ข้อ 2: กราฟจัดอันดับห้องประชุมสูงสุด และจัดอันดับแผนกวิชา */}
+      <DashboardCharts
+        roomRanking={stats?.charts?.roomRanking || []}
+        departmentRanking={stats?.charts?.departmentRanking || []}
+      />
+
+      {/* รายการการจองล่าสุด พร้อมปุ่มพิมพ์แบบคำขอ A4 */}
+      <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-base font-bold text-slate-900">
+              รายการการจองและการอนุมัติล่าสุด (Recent Requests)
+            </h2>
+            <p className="text-xs text-slate-500">
+              คลิกปุ่มพิมพ์เพื่อดูแบบคำขออนุญาตขนาด A4 ตามระเบียบราชการ
             </p>
           </div>
           <Link
             href="/all-bookings"
-            className="text-xs font-semibold text-amber-700 hover:text-amber-900 bg-white px-3 py-1.5 rounded-lg border border-amber-200 shadow-xs"
+            className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1"
           >
-            จัดการอนุมัติ
+            <span>ดูรายการทั้งหมด</span>
+            <ArrowRight className="w-3.5 h-3.5" />
           </Link>
         </div>
 
-        <div className="bg-blue-50/80 border border-blue-200/80 rounded-2xl p-4 flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold text-blue-800">ห้องที่ใช้งานมากที่สุด</p>
-            <p className="text-sm font-bold text-blue-900 mt-0.5 truncate max-w-[200px]">
-              {cards.mostUsedRoomName}
-            </p>
-          </div>
-          <Link
-            href="/reports"
-            className="text-xs font-semibold text-blue-700 hover:text-blue-900 bg-white px-3 py-1.5 rounded-lg border border-blue-200 shadow-xs"
-          >
-            ดูรายงาน
-          </Link>
-        </div>
-
-        <div className="bg-emerald-50/80 border border-emerald-200/80 rounded-2xl p-4 flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold text-emerald-800">อัตราการใช้งานห้อง (Utilization)</p>
-            <p className="text-xl font-extrabold text-emerald-900 mt-0.5">
-              {cards.utilizationRate || 0}%
-            </p>
-          </div>
-          <span className="text-[11px] font-medium text-emerald-700 bg-white px-2.5 py-1 rounded-lg border border-emerald-200">
-            ประสิทธิภาพสูง
-          </span>
-        </div>
-      </div>
-
-      {/* Row 2: Charts & Visualizations */}
-      <DashboardCharts
-        dailyStats={stats?.charts?.dailyStats || []}
-        roomUsage={stats?.charts?.roomUsage || []}
-      />
-
-      {/* Row 3: Upcoming Meetings & Recent Bookings */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Upcoming Meetings */}
-        <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm p-6 flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="font-bold text-slate-900 text-sm sm:text-base">
-                การประชุมที่กำลังจะเริ่มถัดไป (Upcoming)
-              </h3>
-              <p className="text-xs text-slate-400 mt-0.5">การประชุมที่ได้รับการอนุมัติ</p>
-            </div>
-            <Link
-              href="/calendar"
-              className="text-xs font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1"
-            >
-              ดูทั้งหมด <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
-          </div>
-
-          <div className="divide-y divide-slate-100 flex-1">
-            {(!stats?.upcomingMeetings || stats.upcomingMeetings.length === 0) ? (
-              <div className="p-8 text-center text-slate-400 text-xs">
-                ไม่มีการประชุมถัดไปในวันนี้
-              </div>
-            ) : (
-              stats.upcomingMeetings.map((b: any) => (
-                <div key={b.id} className="py-3 flex items-center justify-between gap-3">
-                  <div className="flex items-start gap-3 min-w-0">
-                    <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-xs font-bold shrink-0">
-                      {new Date(b.startTime).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold text-slate-900 truncate">{b.title}</p>
-                      <p className="text-[11px] text-slate-500 truncate">
-                        {b.room.name} • ผู้จัด: {b.organizerName || b.user.name} ({b.participantsCount} คน)
-                      </p>
-                    </div>
-                  </div>
-                  <span className="px-2 py-0.5 text-[10px] font-semibold bg-emerald-100 text-emerald-800 rounded-md shrink-0">
-                    อนุมัติแล้ว
-                  </span>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* Recent Bookings Activity */}
-        <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm p-6 flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="font-bold text-slate-900 text-sm sm:text-base">
-                รายการจองล่าสุด (Recent Bookings)
-              </h3>
-              <p className="text-xs text-slate-400 mt-0.5">ประวัติคำขอจองห้องประชุมล่าสุด</p>
-            </div>
-            <Link
-              href="/all-bookings"
-              className="text-xs font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1"
-            >
-              ดูทั้งหมด <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
-          </div>
-
-          <div className="divide-y divide-slate-100 flex-1">
-            {(!stats?.recentBookings || stats.recentBookings.length === 0) ? (
-              <div className="p-8 text-center text-slate-400 text-xs">
-                ยังไม่มีข้อมูลการจอง
-              </div>
-            ) : (
-              stats.recentBookings.map((b: any) => (
-                <div key={b.id} className="py-3 flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-mono text-slate-400">{b.bookingCode}</span>
-                      <p className="text-xs font-bold text-slate-900 truncate">{b.title}</p>
-                    </div>
-                    <p className="text-[11px] text-slate-500 mt-0.5">
-                      {b.room.name} • {new Date(b.startTime).toLocaleDateString('th-TH')}
-                    </p>
-                  </div>
-                  <span
-                    className={`px-2 py-0.5 text-[10px] font-semibold rounded-md shrink-0 ${
-                      b.status === 'APPROVED'
-                        ? 'bg-emerald-100 text-emerald-800'
-                        : b.status === 'PENDING'
-                        ? 'bg-amber-100 text-amber-800'
-                        : 'bg-slate-100 text-slate-600'
-                    }`}
-                  >
-                    {b.status}
-                  </span>
-                </div>
-              ))
-            )}
-          </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr className="border-b border-slate-200 text-slate-400 font-semibold uppercase tracking-wider">
+                <th className="py-3 px-3">รหัสคำขอ</th>
+                <th className="py-3 px-3">ห้องประชุม</th>
+                <th className="py-3 px-3">ผู้ขอ / แผนกวิชา</th>
+                <th className="py-3 px-3">หัวข้อการประชุม</th>
+                <th className="py-3 px-3">วันและเวลา</th>
+                <th className="py-3 px-3">สถานะ 3 ขั้น</th>
+                <th className="py-3 px-3 text-right">พิมพ์ A4</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {(stats?.upcomingBookings || []).map((b: Booking) => (
+                <tr key={b.id} className="hover:bg-slate-50/80 transition-colors">
+                  <td className="py-3 px-3 font-mono font-medium text-blue-600">{b.bookingCode}</td>
+                  <td className="py-3 px-3 font-semibold text-slate-800">
+                    {b.room?.name || b.customRoomName}
+                  </td>
+                  <td className="py-3 px-3">
+                    <p className="font-medium text-slate-900">{b.requesterName}</p>
+                    <p className="text-[11px] text-slate-500">{b.department}</p>
+                  </td>
+                  <td className="py-3 px-3 text-slate-700 font-medium">{b.title}</td>
+                  <td className="py-3 px-3 text-slate-600 whitespace-nowrap">
+                    {b.startTime.slice(0, 10)} ({b.startTime.slice(11, 16)} - {b.endTime.slice(11, 16)})
+                  </td>
+                  <td className="py-3 px-3">
+                    <span
+                      className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                        b.status === 'APPROVED'
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : b.status === 'REJECTED'
+                          ? 'bg-rose-100 text-rose-800'
+                          : 'bg-amber-100 text-amber-800'
+                      }`}
+                    >
+                      {b.status === 'APPROVED'
+                        ? 'อนุมัติเรียบร้อย'
+                        : b.status === 'ENDORSED'
+                        ? 'ผ่านการรับรอง'
+                        : b.status === 'CHECKED'
+                        ? 'ตรวจห้องแล้ว'
+                        : 'รอการตรวจสอบ'}
+                    </span>
+                  </td>
+                  <td className="py-3 px-3 text-right">
+                    <button
+                      onClick={() => setSelectedBookingForPrint(b)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 text-slate-700 bg-slate-100 hover:bg-blue-50 hover:text-blue-700 rounded-lg font-medium transition-colors"
+                      title="พิมพ์แบบคำขอ A4"
+                    >
+                      <Printer className="w-3.5 h-3.5" />
+                      <span>พิมพ์</span>
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
 
       {/* Booking Modal */}
-      {selectedRoomForBooking && (
-        <BookingModal
-          room={selectedRoomForBooking}
-          isOpen={isBookingModalOpen}
-          onClose={() => setIsBookingModalOpen(false)}
-          onSuccess={() => fetchDashboardData()}
-          allRooms={allRooms}
-        />
-      )}
+      <BookingModal
+        room={null}
+        isOpen={isBookingModalOpen}
+        onClose={() => setIsBookingModalOpen(false)}
+        onSuccess={() => fetchDashboardData()}
+        allRooms={allRooms}
+      />
+
+      {/* A4 Requisition Print Modal */}
+      <RequisitionPrintModal
+        booking={selectedBookingForPrint}
+        isOpen={Boolean(selectedBookingForPrint)}
+        onClose={() => setSelectedBookingForPrint(null)}
+      />
     </div>
   );
 }

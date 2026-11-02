@@ -12,92 +12,60 @@ import {
   CheckCircle,
   AlertTriangle,
   X,
-  Edit3,
-  Trash2,
+  Printer,
+  Search,
+  Filter,
 } from 'lucide-react';
-
-interface CalendarEvent {
-  id: string;
-  bookingCode: string;
-  title: string;
-  start: string;
-  end: string;
-  status: string;
-  room: {
-    id: string;
-    code: string;
-    name: string;
-    building: string;
-    floor: number;
-    capacity: number;
-  };
-  organizer: {
-    id: string;
-    name: string;
-    department: string;
-    email: string;
-  };
-  participantsCount: number;
-  description?: string;
-  isOwner: boolean;
-}
+import { Booking } from '@/types';
+import { RequisitionPrintModal } from '@/components/print/RequisitionPrintModal';
 
 interface CalendarViewProps {
-  events: CalendarEvent[];
-  onCancelBooking: (id: string) => void;
-  onEditBooking?: (event: CalendarEvent) => void;
-  currentUserRole?: string;
+  bookings: Booking[];
+  rooms: any[];
+  onRefresh?: () => void;
 }
 
 type ViewMode = 'month' | 'week' | 'day' | 'agenda';
 
-export function CalendarView({
-  events,
-  onCancelBooking,
-  onEditBooking,
-  currentUserRole,
-}: CalendarViewProps) {
+const ROOM_COLORS: Record<string, { bg: string; text: string; border: string; dot: string; label: string }> = {
+  'rm-101': { bg: 'bg-blue-100', text: 'text-blue-900', border: 'border-blue-400', dot: 'bg-blue-600', label: 'ราชพฤกษ์ (ห้อง 1)' },
+  'rm-102': { bg: 'bg-indigo-100', text: 'text-indigo-900', border: 'border-indigo-400', dot: 'bg-indigo-600', label: 'ชัยพฤกษ์ (ห้อง 2)' },
+  'rm-201': { bg: 'bg-emerald-100', text: 'text-emerald-900', border: 'border-emerald-400', dot: 'bg-emerald-600', label: 'ทองกวาว (ห้อง 3)' },
+  'rm-202': { bg: 'bg-purple-100', text: 'text-purple-900', border: 'border-purple-400', dot: 'bg-purple-600', label: 'อินทนิล (ห้อง 4)' },
+  'rm-301': { bg: 'bg-amber-100', text: 'text-amber-900', border: 'border-amber-400', dot: 'bg-amber-600', label: 'เฟื่องฟ้า (ห้อง 5)' },
+  'rm-302': { bg: 'bg-rose-100', text: 'text-rose-900', border: 'border-rose-400', dot: 'bg-rose-600', label: 'การะเกด (ห้อง 6)' },
+};
+
+export function CalendarView({ bookings, rooms, onRefresh }: CalendarViewProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<ViewMode>('month');
-  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
+  const [selectedRoomId, setSelectedRoomId] = useState<string>('ALL');
+  const [searchDept, setSearchDept] = useState<string>('');
+  const [activeBooking, setActiveBooking] = useState<Booking | null>(null);
+  const [printBooking, setPrintBooking] = useState<Booking | null>(null);
 
-  // Month navigation helpers
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
 
   const handlePrev = () => {
-    if (viewMode === 'month') {
-      setCurrentDate(new Date(year, month - 1, 1));
-    } else if (viewMode === 'week') {
-      const d = new Date(currentDate);
-      d.setDate(d.getDate() - 7);
-      setCurrentDate(d);
-    } else {
-      const d = new Date(currentDate);
-      d.setDate(d.getDate() - 1);
-      setCurrentDate(d);
-    }
+    setCurrentDate(new Date(year, month - 1, 1));
   };
 
   const handleNext = () => {
-    if (viewMode === 'month') {
-      setCurrentDate(new Date(year, month + 1, 1));
-    } else if (viewMode === 'week') {
-      const d = new Date(currentDate);
-      d.setDate(d.getDate() + 7);
-      setCurrentDate(d);
-    } else {
-      const d = new Date(currentDate);
-      d.setDate(d.getDate() + 1);
-      setCurrentDate(d);
-    }
+    setCurrentDate(new Date(year, month + 1, 1));
   };
 
   const handleToday = () => {
     setCurrentDate(new Date());
   };
 
-  // Build days for month view
+  // Filter Bookings by Room and Department
+  const filteredBookings = bookings.filter((b) => {
+    if (selectedRoomId !== 'ALL' && b.roomId !== selectedRoomId) return false;
+    if (searchDept.trim() && !b.department?.toLowerCase().includes(searchDept.trim().toLowerCase())) return false;
+    return true;
+  });
+
   const firstDayOfMonth = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const prevMonthDays = new Date(year, month, 0).getDate();
@@ -107,320 +75,277 @@ export function CalendarView({
     'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม',
   ];
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'APPROVED':
-        return 'bg-emerald-100 text-emerald-800 border-emerald-300';
-      case 'PENDING':
-        return 'bg-amber-100 text-amber-800 border-amber-300';
-      case 'CANCELLED':
-        return 'bg-slate-100 text-slate-500 border-slate-300 line-through';
-      default:
-        return 'bg-blue-100 text-blue-800 border-blue-300';
-    }
-  };
-
   return (
-    <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden flex flex-col">
-      {/* Calendar Header Controls */}
-      <div className="p-4 sm:p-6 border-b border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-50/50">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-xl p-1 shadow-sm">
+    <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm p-6 space-y-6">
+      {/* Top Filter Bar: Room Selector + Department Search */}
+      <div className="flex flex-col md:flex-row items-center justify-between gap-4 pb-4 border-b border-slate-100">
+        <div className="flex items-center gap-3 w-full md:w-auto">
+          {/* Room Filter */}
+          <div className="flex items-center gap-2 bg-slate-50 px-3 py-2 rounded-xl border border-slate-200 w-full sm:w-auto">
+            <Filter className="w-4 h-4 text-slate-500 shrink-0" />
+            <select
+              value={selectedRoomId}
+              onChange={(e) => setSelectedRoomId(e.target.value)}
+              className="text-xs font-semibold text-slate-800 bg-transparent focus:outline-none w-full"
+            >
+              <option value="ALL">ห้องประชุมทั้งหมด (6 ห้องหลัก)</option>
+              {rooms.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.code} - {r.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Department Search */}
+          <div className="relative w-full sm:w-60">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+            <input
+              type="text"
+              placeholder="ค้นหาตามแผนกวิชา..."
+              value={searchDept}
+              onChange={(e) => setSearchDept(e.target.value)}
+              className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+        </div>
+
+        {/* Month Navigator */}
+        <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-end">
+          <div className="flex items-center gap-1">
             <button
               onClick={handlePrev}
-              className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-600 transition"
-              title="ก่อนหน้า"
+              className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-600 transition"
+              title="เดือนก่อนหน้า"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
             <button
               onClick={handleToday}
-              className="px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-lg transition"
+              className="px-3 py-1 text-xs font-semibold rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 transition"
             >
               วันนี้
             </button>
             <button
               onClick={handleNext}
-              className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-600 transition"
-              title="ถัดไป"
+              className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-600 transition"
+              title="เดือนถัดไป"
             >
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
 
-          <h2 className="text-base sm:text-lg font-bold text-slate-900">
+          <h2 className="text-base font-bold text-slate-900 tracking-tight">
             {thaiMonths[month]} {year + 543}
           </h2>
         </div>
+      </div>
 
-        {/* View Mode Switcher */}
-        <div className="flex items-center bg-slate-200/70 p-1 rounded-xl text-xs font-semibold text-slate-600">
-          {(['month', 'week', 'day', 'agenda'] as const).map((mode) => (
-            <button
-              key={mode}
-              onClick={() => setViewMode(mode)}
-              className={`px-3 py-1.5 rounded-lg transition-all capitalize ${
-                viewMode === mode
-                  ? 'bg-white text-blue-600 shadow-sm'
-                  : 'hover:text-slate-900'
+      {/* Room Color Legend (แยกสีตามห้องประชุม) */}
+      <div className="flex items-center gap-3 overflow-x-auto pb-2 text-[11px] font-medium text-slate-600 border-b border-slate-100">
+        <span className="font-semibold text-slate-400 text-xs shrink-0">สีประจำห้อง:</span>
+        {Object.entries(ROOM_COLORS).map(([id, col]) => (
+          <div key={id} className="flex items-center gap-1.5 shrink-0 px-2 py-0.5 rounded-lg bg-slate-50 border border-slate-200">
+            <span className={`w-2.5 h-2.5 rounded-full ${col.dot}`} />
+            <span>{col.label}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Calendar Grid (Month View) */}
+      <div>
+        <div className="grid grid-cols-7 gap-px bg-slate-200 rounded-2xl overflow-hidden border border-slate-200">
+          {['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'].map((day, i) => (
+            <div
+              key={day}
+              className={`py-2 text-center text-xs font-bold bg-slate-100 ${
+                i === 0 || i === 6 ? 'text-rose-600' : 'text-slate-700'
               }`}
             >
-              {mode === 'month' ? 'รายเดือน' : mode === 'week' ? 'รายสัปดาห์' : mode === 'day' ? 'รายวัน' : 'กำหนดการ'}
-            </button>
+              {day}
+            </div>
           ))}
+
+          {/* Previous Month trailing days */}
+          {Array.from({ length: firstDayOfMonth }).map((_, i) => {
+            const dayNum = prevMonthDays - firstDayOfMonth + i + 1;
+            return (
+              <div key={`prev-${i}`} className="min-h-[110px] p-2 bg-slate-50/50 text-slate-300">
+                <span className="text-xs font-medium">{dayNum}</span>
+              </div>
+            );
+          })}
+
+          {/* Current Month days */}
+          {Array.from({ length: daysInMonth }).map((_, i) => {
+            const dayNum = i + 1;
+            const curDateObj = new Date(year, month, dayNum);
+            const dateStr = curDateObj.toISOString().slice(0, 10);
+            const isToday =
+              new Date().toDateString() === curDateObj.toDateString();
+
+            const dayBookings = filteredBookings.filter((b) => {
+              const bStart = b.startTime.slice(0, 10);
+              return bStart === dateStr;
+            });
+
+            return (
+              <div
+                key={`current-${dayNum}`}
+                className={`min-h-[110px] p-1.5 sm:p-2 bg-white flex flex-col justify-between hover:bg-slate-50/80 transition-colors ${
+                  isToday ? 'bg-blue-50/30' : ''
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span
+                    className={`text-xs font-semibold w-6 h-6 flex items-center justify-center rounded-full ${
+                      isToday
+                        ? 'bg-blue-600 text-white font-bold'
+                        : 'text-slate-700'
+                    }`}
+                  >
+                    {dayNum}
+                  </span>
+                  {dayBookings.length > 0 && (
+                    <span className="text-[10px] text-slate-400 font-medium">
+                      {dayBookings.length} รายการ
+                    </span>
+                  )}
+                </div>
+
+                {/* Events list */}
+                <div className="space-y-1 mt-1 overflow-y-auto max-h-[85px]">
+                  {dayBookings.map((b) => {
+                    const col = ROOM_COLORS[b.roomId] || {
+                      bg: 'bg-slate-100',
+                      text: 'text-slate-800',
+                      border: 'border-slate-300',
+                      dot: 'bg-slate-600',
+                    };
+
+                    return (
+                      <button
+                        key={b.id}
+                        onClick={() => setActiveBooking(b)}
+                        className={`w-full text-left p-1.5 rounded-lg border text-[11px] font-medium leading-tight shadow-2xs transition-all hover:scale-[1.02] flex flex-col gap-0.5 ${col.bg} ${col.text} ${col.border}`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold truncate">{b.room?.name || b.customRoomName}</span>
+                          <span className="text-[9px] opacity-75 font-mono">{b.startTime.slice(11, 16)}</span>
+                        </div>
+                        <span className="truncate text-[10px] opacity-90">{b.title}</span>
+                        <span className="truncate text-[9px] text-slate-500">[{b.department}]</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
-      {/* Main View Area */}
-      <div className="flex-1 overflow-x-auto">
-        {viewMode === 'month' && (
-          <div className="min-w-[700px]">
-            {/* Days of week header */}
-            <div className="grid grid-cols-7 border-b border-slate-100 bg-slate-50/80 text-center py-2.5 text-xs font-semibold text-slate-500">
-              <span className="text-rose-500">อา.</span>
-              <span>จ.</span>
-              <span>อ.</span>
-              <span>พ.</span>
-              <span>พฤ.</span>
-              <span>ศ.</span>
-              <span className="text-blue-500">ส.</span>
-            </div>
-
-            {/* Grid Days */}
-            <div className="grid grid-cols-7 auto-rows-fr divide-x divide-y divide-slate-100">
-              {/* Previous month padding days */}
-              {Array.from({ length: firstDayOfMonth }).map((_, i) => (
-                <div key={`prev-${i}`} className="min-h-[100px] p-2 bg-slate-50/30 text-slate-300 text-xs">
-                  {prevMonthDays - firstDayOfMonth + i + 1}
-                </div>
-              ))}
-
-              {/* Current month days */}
-              {Array.from({ length: daysInMonth }).map((_, i) => {
-                const dayNum = i + 1;
-                const dateKey = `${year}-${String(month + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
-                const dayEvents = events.filter((e) => e.start.startsWith(dateKey));
-
-                const isToday =
-                  new Date().toDateString() === new Date(year, month, dayNum).toDateString();
-
-                return (
-                  <div
-                    key={`day-${dayNum}`}
-                    className={`min-h-[110px] p-1.5 sm:p-2 transition-colors hover:bg-blue-50/20 ${
-                      isToday ? 'bg-blue-50/40' : ''
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-1">
-                      <span
-                        className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-semibold ${
-                          isToday
-                            ? 'bg-blue-600 text-white shadow-sm'
-                            : 'text-slate-700'
-                        }`}
-                      >
-                        {dayNum}
-                      </span>
-                      {dayEvents.length > 0 && (
-                        <span className="text-[10px] font-semibold text-slate-400">
-                          {dayEvents.length} รายการ
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Day Events List */}
-                    <div className="space-y-1 overflow-y-auto max-h-[85px]">
-                      {dayEvents.map((evt) => {
-                        const timeStr = new Date(evt.start).toLocaleTimeString('th-TH', {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        });
-                        return (
-                          <div
-                            key={evt.id}
-                            onClick={() => setSelectedEvent(evt)}
-                            className={`p-1 sm:p-1.5 rounded-lg text-[11px] font-medium border cursor-pointer truncate transition-transform hover:scale-[1.02] shadow-xs ${getStatusColor(
-                              evt.status
-                            )}`}
-                            title={`${evt.title} (${evt.room.name})`}
-                          >
-                            <span className="font-bold mr-1">{timeStr}</span>
-                            <span>{evt.title}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Agenda View */}
-        {viewMode === 'agenda' && (
-          <div className="divide-y divide-slate-100 p-4 sm:p-6 space-y-4">
-            {events.length === 0 ? (
-              <div className="text-center py-12 text-slate-400 text-sm">
-                ไม่มีกำหนดการจองห้องประชุม
-              </div>
-            ) : (
-              events.map((evt) => (
-                <div
-                  key={evt.id}
-                  onClick={() => setSelectedEvent(evt)}
-                  className="p-4 rounded-2xl hover:bg-slate-50 transition border border-transparent hover:border-slate-200 cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-xs shrink-0">
-                      {new Date(evt.start).getDate()}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h4 className="font-bold text-slate-900 text-sm">{evt.title}</h4>
-                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-semibold border ${getStatusColor(evt.status)}`}>
-                          {evt.status}
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-500 mt-1 flex flex-wrap items-center gap-3">
-                        <span className="flex items-center gap-1">
-                          <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                          {evt.room.name} ({evt.room.code})
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Clock className="w-3.5 h-3.5 text-slate-400" />
-                          {new Date(evt.start).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} - {new Date(evt.end).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <User className="w-3.5 h-3.5 text-slate-400" />
-                          {evt.organizer.name}
-                        </span>
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedEvent(evt);
-                    }}
-                    className="text-xs font-semibold text-blue-600 hover:text-blue-800 self-end sm:self-center"
-                  >
-                    ดูรายละเอียด
-                  </button>
-                </div>
-              ))
-            )}
-          </div>
-        )}
-
-        {/* Day / Week Fallback message */}
-        {(viewMode === 'week' || viewMode === 'day') && (
-          <div className="p-8 text-center text-slate-500 text-sm">
-            <p className="font-semibold text-slate-700 mb-1">
-              {viewMode === 'week' ? 'ตารางการจองประจำสัปดาห์' : 'ตารางการจองประจำวัน'}
-            </p>
-            <p className="text-xs text-slate-400 mb-4">
-              คลิกมุมมอง "กำหนดการ (Agenda)" หรือ "รายเดือน (Month)" เพื่อดูรายการการจองแบบเต็มรูป
-            </p>
-            <div className="max-w-xl mx-auto space-y-2 text-left">
-              {events.slice(0, 5).map((evt) => (
-                <div
-                  key={evt.id}
-                  onClick={() => setSelectedEvent(evt)}
-                  className="p-3 bg-slate-50 hover:bg-slate-100 rounded-xl cursor-pointer text-xs flex justify-between items-center"
-                >
-                  <span className="font-medium text-slate-800">{evt.title} ({evt.room.name})</span>
-                  <span className="text-slate-500">{new Date(evt.start).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' })}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Event Detail Modal Popover */}
-      {selectedEvent && (
+      {/* Booking Detail Popup Modal */}
+      {activeBooking && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-              <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${getStatusColor(selectedEvent.status)}`}>
-                {selectedEvent.status === 'APPROVED' ? 'อนุมัติแล้ว' : selectedEvent.status === 'PENDING' ? 'รออนุมัติ' : selectedEvent.status}
-              </span>
+          <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-blue-700 to-indigo-700 text-white">
+              <div>
+                <span className="text-[10px] font-mono tracking-wider opacity-80 uppercase block">
+                  {activeBooking.bookingCode}
+                </span>
+                <h3 className="text-base font-bold">{activeBooking.title}</h3>
+              </div>
               <button
-                onClick={() => setSelectedEvent(null)}
-                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-xl"
+                onClick={() => setActiveBooking(null)}
+                className="text-white/80 hover:text-white"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="py-4 space-y-3">
-              <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                  รหัสการจอง: {selectedEvent.bookingCode}
-                </span>
-                <h3 className="text-base font-bold text-slate-900 mt-0.5">
-                  {selectedEvent.title}
-                </h3>
-              </div>
-
-              <div className="p-3 bg-slate-50 rounded-xl space-y-2 text-xs text-slate-600">
-                <div className="flex items-center gap-2">
-                  <MapPin className="w-4 h-4 text-blue-600 shrink-0" />
-                  <span className="font-medium text-slate-900">{selectedEvent.room.name}</span>
-                  <span className="text-slate-400">({selectedEvent.room.code} • {selectedEvent.room.building} ชั้น {selectedEvent.room.floor})</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-blue-600 shrink-0" />
-                  <span>
-                    {new Date(selectedEvent.start).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' })} - {new Date(selectedEvent.end).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <User className="w-4 h-4 text-blue-600 shrink-0" />
-                  <span>ผู้จัด: {selectedEvent.organizer.name} ({selectedEvent.organizer.department})</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Users className="w-4 h-4 text-blue-600 shrink-0" />
-                  <span>จำนวนผู้เข้าร่วม: {selectedEvent.participantsCount} คน</span>
-                </div>
-              </div>
-
-              {selectedEvent.description && (
+            <div className="p-6 space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
                 <div>
-                  <p className="text-[11px] font-semibold text-slate-400 mb-1">รายละเอียดเพิ่มเติม</p>
-                  <p className="text-xs text-slate-600 leading-relaxed bg-slate-50 p-3 rounded-xl">
-                    {selectedEvent.description}
-                  </p>
+                  <span className="text-slate-400 block text-[10px]">ห้องประชุม</span>
+                  <span className="font-bold text-slate-900 text-sm">{activeBooking.room?.name || activeBooking.customRoomName}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px]">สถานะการอนุมัติ</span>
+                  <span className="font-bold text-emerald-600 text-sm">{activeBooking.status}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px]">ผู้ขอใช้บริการ</span>
+                  <span className="font-semibold text-slate-800">{activeBooking.requesterName}</span>
+                  <p className="text-[10px] text-slate-500">{activeBooking.department}</p>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px]">วัน-เวลา</span>
+                  <span className="font-semibold text-slate-800">{activeBooking.startTime.slice(0, 10)}</span>
+                  <p className="text-[10px] text-slate-500">{activeBooking.startTime.slice(11, 16)} - {activeBooking.endTime.slice(11, 16)} น.</p>
+                </div>
+              </div>
+
+              {activeBooking.description && (
+                <div>
+                  <span className="font-bold text-slate-700 block mb-0.5">วัตถุประสงค์:</span>
+                  <p className="text-slate-600 bg-slate-50 p-2.5 rounded-lg border border-slate-200">{activeBooking.description}</p>
                 </div>
               )}
-            </div>
 
-            <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-2">
-              {(selectedEvent.isOwner || currentUserRole === 'ADMIN' || currentUserRole === 'MANAGER') && (
+              {/* 3-Level Approval Summary */}
+              <div className="p-3 bg-blue-50/60 rounded-xl border border-blue-200 space-y-1.5">
+                <span className="font-bold text-blue-900 block text-[11px]">สถานะการตรวจสอบ 3 ระดับ:</span>
+                <div className="grid grid-cols-3 gap-2 text-center text-[10px]">
+                  <div className="p-1.5 bg-white rounded-lg border border-blue-100">
+                    <p className="font-semibold text-slate-700">1. ตรวจห้อง</p>
+                    <p className="text-slate-500">นายวัชรพงศ์ โสภา</p>
+                    <span className="font-bold text-emerald-600">{activeBooking.stage1?.status}</span>
+                  </div>
+                  <div className="p-1.5 bg-white rounded-lg border border-blue-100">
+                    <p className="font-semibold text-slate-700">2. รับรอง</p>
+                    <p className="text-slate-500">นายเอกราช เขียวทอง</p>
+                    <span className="font-bold text-blue-600">{activeBooking.stage2?.status}</span>
+                  </div>
+                  <div className="p-1.5 bg-white rounded-lg border border-blue-100">
+                    <p className="font-semibold text-slate-700">3. อนุมัติ</p>
+                    <p className="text-slate-500">นายชาตรี เริงชัยภูมิ</p>
+                    <span className="font-bold text-indigo-600">{activeBooking.stage3?.status}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center justify-between pt-2 border-t border-slate-100">
                 <button
+                  type="button"
                   onClick={() => {
-                    if (confirm('คุณต้องการยกเลิกการจองนี้ใช่หรือไม่?')) {
-                      onCancelBooking(selectedEvent.id);
-                      setSelectedEvent(null);
-                    }
+                    setPrintBooking(activeBooking);
                   }}
-                  className="px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 font-semibold text-xs rounded-xl transition flex items-center gap-1.5"
+                  className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold shadow-sm transition"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  ยกเลิกการจอง
+                  <Printer className="w-4 h-4" />
+                  <span>พิมพ์แบบคำขอ A4</span>
                 </button>
-              )}
-              <button
-                onClick={() => setSelectedEvent(null)}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition"
-              >
-                ปิด
-              </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveBooking(null)}
+                  className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-xl font-medium"
+                >
+                  ปิด
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
+
+      {/* A4 Requisition Print Modal */}
+      <RequisitionPrintModal
+        booking={printBooking}
+        isOpen={Boolean(printBooking)}
+        onClose={() => setPrintBooking(null)}
+      />
     </div>
   );
 }
